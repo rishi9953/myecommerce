@@ -1,7 +1,5 @@
 [build]
-  # Note: Flutter needs to be installed in Netlify's build environment
-  # You may need to use a build image with Flutter or install it manually
-  command = "flutter pub get && flutter build web --release"
+  command = "bash netlify-build.sh"
   publish = "build/web"
 
 [build.environment]
