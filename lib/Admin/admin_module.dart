@@ -7,14 +7,14 @@ import 'package:myecommerce/Admin/Pages/orders_page.dart';
 import 'package:myecommerce/Admin/Pages/products_page.dart';
 import 'package:myecommerce/Admin/Pages/subcategories_page.dart';
 import 'package:myecommerce/Admin/Pages/user_page.dart';
-import 'package:myecommerce/Admin/pages/admin_home_page.dart';
-import 'package:myecommerce/Admin/repositories/banner_repository.dart';
+import 'package:myecommerce/Admin/Pages/admin_home_page.dart';
+import 'package:myecommerce/Admin/Repositories/banner_repository.dart';
 
 class AdminModule extends Module {
   @override
   void binds(i) {
-    i.addSingleton(FirebaseStorageService.new);
-    i.addSingleton(BannerRepository.new);
+    i.addSingleton<FirebaseStorageService>(() => FirebaseStorageService());
+    i.addSingleton<BannerRepository>(() => BannerRepository());
     // i.addSingleton(BannerController.new);
   }
 

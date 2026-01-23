@@ -1,4 +1,4 @@
-import 'package:myecommerce/Admin/admin_home.dart';
+import 'package:myecommerce/Admin/Models/banner_model.dart';
 
 class BannerRepository {
   final List<BannerModel> _banners = [];

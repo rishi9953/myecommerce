@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_modular/flutter_modular.dart';
-import '../widgets/admin_sidebar.dart';
+import '../Widgets/admin_sidebar.dart';
 
 class AdminHomePage extends StatefulWidget {
   const AdminHomePage({super.key});
