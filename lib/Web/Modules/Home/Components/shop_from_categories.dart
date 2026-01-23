@@ -1,21 +1,15 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:gap/gap.dart';
 import 'package:go_router/go_router.dart';
+import 'package:myecommerce/Web/service/firestore_storefront_service.dart';
 import 'package:myecommerce/Web/service/responsive_service.dart';
 import 'package:myecommerce/Web/service/route_service.dart';
 
 class ShopFromCategories extends StatelessWidget {
-  const ShopFromCategories({super.key});
+  ShopFromCategories({super.key});
 
-  final List categories = const [
-    {'icon': 'assets/categories/mobile.png', 'label': 'Mobile'},
-    {'icon': 'assets/categories/cosmetics.png', 'label': 'Cosmetics'},
-    {'icon': 'assets/categories/electronics.png', 'label': 'Electronics'},
-    {'icon': 'assets/categories/furniture.png', 'label': 'Furniture'},
-    {'icon': 'assets/categories/watch.png', 'label': 'Watches'},
-    {'icon': 'assets/categories/decor.png', 'label': 'Decor'},
-    {'icon': 'assets/categories/accessories.png', 'label': 'Accessories'},
-  ];
+  final _store = FirestoreStorefrontService();
 
   @override
   Widget build(BuildContext context) {
@@ -66,39 +60,73 @@ class ShopFromCategories extends StatelessWidget {
           const SizedBox(height: 20),
 
           /// MOBILE → ListView | TABLET/DESKTOP → Wrap
-          isMobile
-              ? SizedBox(
-                  height: 160,
-                  child: ListView.separated(
-                    scrollDirection: Axis.horizontal,
-                    itemCount: categories.length,
-                    separatorBuilder: (_, __) => const SizedBox(width: 8),
-                    itemBuilder: (context, index) {
-                      return CategoryChip(
-                        label: categories[index]['label'],
-                        icon: categories[index]['icon'],
-                      );
+          StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+            stream: _store.categories(),
+            builder: (context, snapshot) {
+              final docs = snapshot.data?.docs ?? const [];
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return const Padding(
+                  padding: EdgeInsets.all(24),
+                  child: Center(child: CircularProgressIndicator()),
+                );
+              }
+              if (docs.isEmpty) {
+                return const Padding(
+                  padding: EdgeInsets.all(12),
+                  child: Text('No categories yet'),
+                );
+              }
+
+              final items = docs
+                  .map(
+                    (d) => {
+                      'id': d.id,
+                      'label': (d.data()['name'] ?? d.id).toString(),
+                      'icon': (d.data()['imageUrl'] ?? '').toString(),
                     },
-                  ),
-                )
-              : Wrap(
-                  spacing: 8,
-                  runSpacing: 16,
-                  children: List.generate(
-                    categories.length,
-                    (index) => InkWell(
-                      onTap: () {
-                        context.go(
-                          '${Routes.category}/${categories[index]['label']}?icon=${categories[index]['icon']}',
-                        );
-                      },
-                      child: CategoryChip(
-                        label: categories[index]['label'],
-                        icon: categories[index]['icon'],
+                  )
+                  .toList();
+
+              return isMobile
+                  ? SizedBox(
+                      height: 160,
+                      child: ListView.separated(
+                        scrollDirection: Axis.horizontal,
+                        itemCount: items.length,
+                        separatorBuilder: (_, __) => const SizedBox(width: 8),
+                        itemBuilder: (context, index) {
+                          return InkWell(
+                            onTap: () => context.go(
+                              '${Routes.category}/${items[index]['id']}?name=${Uri.encodeComponent(items[index]['label']!)}',
+                            ),
+                            child: CategoryChip(
+                              label: items[index]['label']!,
+                              icon: items[index]['icon']!,
+                              isNetwork: true,
+                            ),
+                          );
+                        },
                       ),
-                    ),
-                  ),
-                ),
+                    )
+                  : Wrap(
+                      spacing: 8,
+                      runSpacing: 16,
+                      children: List.generate(
+                        items.length,
+                        (index) => InkWell(
+                          onTap: () => context.go(
+                            '${Routes.category}/${items[index]['id']}?name=${Uri.encodeComponent(items[index]['label']!)}',
+                          ),
+                          child: CategoryChip(
+                            label: items[index]['label']!,
+                            icon: items[index]['icon']!,
+                            isNetwork: true,
+                          ),
+                        ),
+                      ),
+                    );
+            },
+          ),
         ],
       ),
     );
@@ -109,8 +137,14 @@ class ShopFromCategories extends StatelessWidget {
 class CategoryChip extends StatelessWidget {
   final String label;
   final String icon;
+  final bool isNetwork;
 
-  const CategoryChip({super.key, required this.label, required this.icon});
+  const CategoryChip({
+    super.key,
+    required this.label,
+    required this.icon,
+    this.isNetwork = false,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -140,11 +174,23 @@ class CategoryChip extends StatelessWidget {
               color: Colors.grey.shade100,
               shape: BoxShape.circle,
             ),
-            child: Image.asset(
-              icon,
-              errorBuilder: (_, __, ___) =>
-                  Icon(Icons.photo, size: 24, color: Colors.grey.shade400),
-            ),
+            child: isNetwork
+                ? Image.network(
+                    icon,
+                    errorBuilder: (_, __, ___) => Icon(
+                      Icons.photo,
+                      size: 24,
+                      color: Colors.grey.shade400,
+                    ),
+                  )
+                : Image.asset(
+                    icon,
+                    errorBuilder: (_, __, ___) => Icon(
+                      Icons.photo,
+                      size: 24,
+                      color: Colors.grey.shade400,
+                    ),
+                  ),
           ),
           const Gap(12),
           Text(

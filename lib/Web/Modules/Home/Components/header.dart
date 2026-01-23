@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:gap/gap.dart';
 import 'package:go_router/go_router.dart';
+import 'package:myecommerce/Web/service/cart/cart_scope.dart';
 import 'package:myecommerce/Web/service/route_service.dart';
 
 class Header extends StatelessWidget {
@@ -17,6 +18,7 @@ class Header extends StatelessWidget {
             final isDesktop = constraints.maxWidth >= 1024;
             final isTablet =
                 constraints.maxWidth >= 768 && constraints.maxWidth < 1024;
+            // ignore: unused_local_variable
             final isMobile = constraints.maxWidth < 768;
 
             return Column(
@@ -28,9 +30,9 @@ class Header extends StatelessWidget {
                 ] else if (isTablet) ...[
                   _tabletHeader(),
                   const Gap(12),
-                  _tabletSubHeader(),
+                  _tabletSubHeader(context),
                 ] else ...[
-                  _mobileHeader(),
+                  _mobileHeader(context),
                 ],
               ],
             );
@@ -76,6 +78,7 @@ class Header extends StatelessWidget {
   }
 
   Widget _desktopSubHeader(BuildContext context) {
+    final cart = CartScope.of(context);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 80, vertical: 10),
       child: Row(
@@ -105,8 +108,8 @@ class Header extends StatelessWidget {
           ),
           _HeaderItem(
             icon: Icons.shopping_cart_outlined,
-            text: 'Cart',
-            onTap: () {},
+            text: 'Cart (${cart.totalQty})',
+            onTap: () => context.go(Routes.cart),
           ),
         ],
       ),
@@ -147,7 +150,8 @@ class Header extends StatelessWidget {
     );
   }
 
-  Widget _tabletSubHeader() {
+  Widget _tabletSubHeader(BuildContext context) {
+    final cart = CartScope.of(context);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
       child: Row(
@@ -171,8 +175,8 @@ class Header extends StatelessWidget {
           ),
           _HeaderItem(
             icon: Icons.shopping_cart_outlined,
-            text: 'Cart',
-            onTap: () {},
+            text: 'Cart (${cart.totalQty})',
+            onTap: () => context.go(Routes.cart),
           ),
         ],
       ),
@@ -180,7 +184,9 @@ class Header extends StatelessWidget {
   }
 
   // Mobile Header (< 768px)
-  Widget _mobileHeader() {
+  Widget _mobileHeader(BuildContext context) {
+    // read cart so this widget rebuilds when cart changes
+    CartScope.of(context);
     return Column(
       children: [
         Container(
@@ -212,7 +218,7 @@ class Header extends StatelessWidget {
               ),
               IconButton(
                 icon: Icon(Icons.shopping_cart_outlined, size: 22),
-                onPressed: () {},
+                onPressed: () => context.go(Routes.cart),
                 padding: EdgeInsets.all(8),
                 constraints: BoxConstraints(),
               ),

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:myecommerce/Web/service/Firebase/firebase_auth.dart';
+import 'package:myecommerce/Web/service/firestore_storefront_service.dart';
 import 'package:myecommerce/Web/service/responsive_service.dart';
 
 class SignUpScreen extends StatefulWidget {
@@ -37,10 +38,18 @@ class _SignUpScreenState extends State<SignUpScreen> {
     setState(() => _isLoading = true);
 
     try {
-      await _authService.signUpWithEmailPassword(
+      final cred = await _authService.signUpWithEmailPassword(
         email: _emailController.text,
         password: _passwordController.text,
       );
+
+      if (cred?.user != null) {
+        await FirestoreStorefrontService().upsertUserProfile(
+          uid: cred!.user!.uid,
+          email: _emailController.text,
+          name: _nameController.text,
+        );
+      }
 
       if (mounted) {
         // Navigate to home screen after successful sign up

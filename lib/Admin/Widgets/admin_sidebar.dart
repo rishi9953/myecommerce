@@ -38,6 +38,34 @@ class AdminSidebar extends StatelessWidget {
               ),
 
               _SidebarItem(
+                icon: Icons.receipt_long,
+                title: 'Orders',
+                isSelected: currentPath.startsWith('/orders'),
+                onTap: () => Modular.to.navigate('/orders'),
+              ),
+
+              _SidebarItem(
+                icon: Icons.inventory_2,
+                title: 'Products',
+                isSelected: currentPath.startsWith('/products'),
+                onTap: () => Modular.to.navigate('/products'),
+              ),
+
+              _SidebarItem(
+                icon: Icons.category,
+                title: 'Categories',
+                isSelected: currentPath.startsWith('/categories'),
+                onTap: () => Modular.to.navigate('/categories'),
+              ),
+
+              _SidebarItem(
+                icon: Icons.subdirectory_arrow_right,
+                title: 'Subcategories',
+                isSelected: currentPath.startsWith('/subcategories'),
+                onTap: () => Modular.to.navigate('/subcategories'),
+              ),
+
+              _SidebarItem(
                 icon: Icons.people,
                 title: 'Users',
                 isSelected: currentPath.startsWith('/users'),

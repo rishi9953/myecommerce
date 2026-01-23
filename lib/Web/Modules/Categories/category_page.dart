@@ -1,17 +1,20 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:gap/gap.dart';
 import 'package:go_router/go_router.dart';
 import 'package:myecommerce/Web/Modules/Home/Components/footer.dart';
 import 'package:myecommerce/Web/Modules/Home/Components/header.dart';
+import 'package:myecommerce/Web/service/firestore_storefront_service.dart';
 import 'package:myecommerce/Web/service/responsive_service.dart';
-import 'package:myecommerce/Web/service/route_service.dart';
 
 class CategoryPage extends StatefulWidget {
+  final String categoryId;
   final String categoryName;
   final String categoryIcon;
 
   const CategoryPage({
     super.key,
+    required this.categoryId,
     required this.categoryName,
     required this.categoryIcon,
   });
@@ -33,74 +36,8 @@ class _CategoryPageState extends State<CategoryPage> {
   bool isDiscountExpanded = false;
   bool isAvailabilityExpanded = false;
 
-  final List<Map<String, dynamic>> products = [
-    {
-      'name': 'ZARA Suit Blazer Midnight Black Cotton',
-      'price': 125,
-      'originalPrice': 250,
-      'rating': 4.7,
-      'reviews': 21671,
-      'image': 'assets/products/product1.png',
-      'discount': 125,
-      'brand': 'Zara',
-      'flashDeal': '5 Hours',
-    },
-    {
-      'name': 'ZARA Black SunGlasses Anti Dust Resistant',
-      'price': 126,
-      'originalPrice': 252,
-      'rating': 4.7,
-      'reviews': 21671,
-      'image': 'assets/products/product2.png',
-      'discount': 126,
-      'brand': 'Zara',
-      'flashDeal': '1 Hours',
-    },
-    {
-      'name': 'Black Boots with Glossy Finishing Travel',
-      'price': 126,
-      'originalPrice': 252,
-      'rating': 4.7,
-      'reviews': 21671,
-      'image': 'assets/products/product3.png',
-      'discount': 126,
-      'brand': 'Zara',
-      'flashDeal': '5 Hours',
-    },
-    {
-      'name': 'ZARA Suit Blazer Midnight Black Cotton',
-      'price': 125,
-      'originalPrice': 250,
-      'rating': 4.7,
-      'reviews': 21671,
-      'image': 'assets/products/product4.png',
-      'discount': 125,
-      'brand': 'Zara',
-      'flashDeal': null,
-    },
-    {
-      'name': 'ZARA Black SunGlasses Anti Dust Resistant',
-      'price': 126,
-      'originalPrice': 252,
-      'rating': 4.7,
-      'reviews': 21671,
-      'image': 'assets/products/product5.png',
-      'discount': 126,
-      'brand': 'Zara',
-      'flashDeal': null,
-    },
-    {
-      'name': 'Black Boots with Glossy Finishing Travel',
-      'price': 126,
-      'originalPrice': 252,
-      'rating': 4.7,
-      'reviews': 21671,
-      'image': 'assets/products/product6.png',
-      'discount': 126,
-      'brand': 'Zara',
-      'flashDeal': null,
-    },
-  ];
+  final _store = FirestoreStorefrontService();
+  String? selectedSubcategoryId;
 
   final List<String> brands = [
     'Nike',
@@ -207,6 +144,37 @@ class _CategoryPageState extends State<CategoryPage> {
                   fontWeight: FontWeight.bold,
                 ),
               ),
+              const Gap(12),
+              StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+                stream: _store.subcategories(categoryId: widget.categoryId),
+                builder: (context, snap) {
+                  final subs = snap.data?.docs ?? const [];
+                  return SizedBox(
+                    width: 260,
+                    child: DropdownButtonFormField<String>(
+                      value: selectedSubcategoryId,
+                      decoration: const InputDecoration(
+                        isDense: true,
+                        labelText: 'Subcategory',
+                        border: OutlineInputBorder(),
+                      ),
+                      items: [
+                        const DropdownMenuItem<String>(
+                          value: null,
+                          child: Text('All'),
+                        ),
+                        ...subs.map(
+                          (d) => DropdownMenuItem<String>(
+                            value: d.id,
+                            child: Text((d.data()['name'] ?? d.id).toString()),
+                          ),
+                        ),
+                      ],
+                      onChanged: (v) => setState(() => selectedSubcategoryId = v),
+                    ),
+                  );
+                },
+              ),
             ],
           ),
           Expanded(
@@ -227,7 +195,7 @@ class _CategoryPageState extends State<CategoryPage> {
 
                 // Items count
                 Text(
-                  'Showing 1 - ${products.length} of ${products.length * 16} items',
+                  'Browse products',
                   style: TextStyle(fontSize: 14, color: Colors.grey.shade700),
                 ),
                 const Gap(16),
@@ -293,22 +261,63 @@ class _CategoryPageState extends State<CategoryPage> {
   Widget _buildProductGrid(bool isMobile, bool isTablet) {
     final crossAxisCount = isMobile ? 2 : (isTablet ? 3 : 3);
 
-    return GridView.builder(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      padding: const EdgeInsets.all(0),
-      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: crossAxisCount,
-        childAspectRatio: 0.68,
-        crossAxisSpacing: 16,
-        mainAxisSpacing: 16,
+    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+      stream: _store.products(
+        categoryId: widget.categoryId,
+        subcategoryId: selectedSubcategoryId,
       ),
-      itemCount: products.length,
-      itemBuilder: (_, i) => InkWell(
-        onTap: (){
-          context.go(Routes.product, extra: products[i]);
-        },
-        child: ProductCard(product: products[i])),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Padding(
+            padding: EdgeInsets.all(24),
+            child: Center(child: CircularProgressIndicator()),
+          );
+        }
+        if (snapshot.hasError) {
+          return Padding(
+            padding: const EdgeInsets.all(24),
+            child: Text('Error: ${snapshot.error}'),
+          );
+        }
+        final docs = snapshot.data?.docs ?? const [];
+        if (docs.isEmpty) {
+          return const Padding(
+            padding: EdgeInsets.all(24),
+            child: Text('No products found.'),
+          );
+        }
+
+        return GridView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          padding: const EdgeInsets.all(0),
+          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: crossAxisCount,
+            childAspectRatio: 0.68,
+            crossAxisSpacing: 16,
+            mainAxisSpacing: 16,
+          ),
+          itemCount: docs.length,
+          itemBuilder: (_, i) {
+            final doc = docs[i];
+            final data = doc.data();
+            return InkWell(
+              onTap: () => context.go('/product/${doc.id}'),
+              child: ProductCard(product: {
+                'id': doc.id,
+                'title': (data['title'] ?? '').toString(),
+                'price': data['price'] ?? 0,
+                'imageUrl': ((data['imageUrls'] as List?)?.cast<String>() ?? const [])
+                    .cast<String>()
+                    .cast<String>()
+                    .isEmpty
+                    ? ''
+                    : ((data['imageUrls'] as List?)!.first).toString(),
+              }),
+            );
+          },
+        );
+      },
     );
   }
 
@@ -517,10 +526,15 @@ class _ProductCardState extends State<ProductCard> {
                       ),
                     ),
                     child: Image.asset(
-                      widget.product['image'],
+                      '',
                       fit: BoxFit.cover,
                       errorBuilder: (_, __, ___) =>
-                          const Icon(Icons.image, size: 60),
+                          Image.network(
+                            (widget.product['imageUrl'] ?? '').toString(),
+                            fit: BoxFit.cover,
+                            errorBuilder: (_, __, ___) =>
+                                const Icon(Icons.image, size: 60),
+                          ),
                     ),
                   ),
 
@@ -590,7 +604,7 @@ class _ProductCardState extends State<ProductCard> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    widget.product['name'],
+                    (widget.product['title'] ?? '').toString(),
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
@@ -606,7 +620,7 @@ class _ProductCardState extends State<ProductCard> {
                       const Icon(Icons.star, color: Colors.amber, size: 16),
                       const Gap(4),
                       Text(
-                        '${widget.product['rating']}',
+                        '4.5',
                         style: const TextStyle(
                           fontWeight: FontWeight.w600,
                           fontSize: 13,
@@ -614,7 +628,7 @@ class _ProductCardState extends State<ProductCard> {
                       ),
                       const Gap(4),
                       Text(
-                        '(${widget.product['reviews']} Ratings)',
+                        '(ratings)',
                         style: TextStyle(
                           color: Colors.grey.shade600,
                           fontSize: 12,
@@ -632,7 +646,7 @@ class _ProductCardState extends State<ProductCard> {
                           onPressed: () {},
                           icon: const Icon(Icons.local_offer, size: 16),
                           label: Text(
-                            'GET DEAL - ₹${widget.product['discount']}',
+                            'GET DEAL',
                             style: const TextStyle(fontSize: 11),
                           ),
                           style: ElevatedButton.styleFrom(
@@ -654,7 +668,7 @@ class _ProductCardState extends State<ProductCard> {
                         child: OutlinedButton(
                           onPressed: () {},
                           child: Text(
-                            'BUY NOW - ₹${widget.product['price']}',
+                            'BUY NOW - ₹${widget.product['price'] ?? 0}',
                             style: const TextStyle(fontSize: 11),
                           ),
                           style: OutlinedButton.styleFrom(

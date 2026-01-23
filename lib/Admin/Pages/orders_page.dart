@@ -3,10 +3,18 @@ import 'package:flutter/material.dart';
 
 import '../Firebase/firebase_services.dart';
 
-class UsersPage extends StatelessWidget {
-  const UsersPage({super.key});
+class OrdersPage extends StatelessWidget {
+  const OrdersPage({super.key});
 
-  static const roles = ['customer', 'admin'];
+  static const List<String> statuses = [
+    'pending',
+    'paid',
+    'processing',
+    'shipped',
+    'delivered',
+    'cancelled',
+    'refunded',
+  ];
 
   @override
   Widget build(BuildContext context) {
@@ -20,14 +28,14 @@ class UsersPage extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text(
-              'Users',
+              'Orders',
               style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 16),
             Expanded(
               child: Card(
                 child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-                  stream: db.getUsers(),
+                  stream: db.getOrders(),
                   builder: (context, snapshot) {
                     if (snapshot.connectionState == ConnectionState.waiting) {
                       return const Center(child: CircularProgressIndicator());
@@ -40,7 +48,7 @@ class UsersPage extends StatelessWidget {
                     if (docs.isEmpty) {
                       return const Center(
                         child: Text(
-                          'No users found in Firestore collection `users`.',
+                          'No orders yet (collection `orders` is empty).',
                         ),
                       );
                     }
@@ -51,29 +59,29 @@ class UsersPage extends StatelessWidget {
                       itemBuilder: (context, i) {
                         final doc = docs[i];
                         final data = doc.data();
-                        final email = (data['email'] ?? '').toString();
-                        final name = (data['name'] ?? '').toString();
-                        final role = (data['role'] ?? 'customer').toString();
+                        final status = (data['status'] ?? 'pending').toString();
+                        final total = (data['total'] ?? '').toString();
+                        final userId = (data['userId'] ?? '').toString();
 
                         return ListTile(
-                          title: Text(name.isEmpty ? email : name),
-                          subtitle: Text(email.isEmpty ? 'UserId: ${doc.id}' : email),
+                          title: Text('Order ${doc.id}'),
+                          subtitle: Text('User: $userId  •  Total: $total'),
                           trailing: DropdownButton<String>(
-                            value: roles.contains(role) ? role : 'customer',
-                            items: roles
+                            value: statuses.contains(status) ? status : 'pending',
+                            items: statuses
                                 .map(
-                                  (r) => DropdownMenuItem(
-                                    value: r,
-                                    child: Text(r),
+                                  (s) => DropdownMenuItem(
+                                    value: s,
+                                    child: Text(s),
                                   ),
                                 )
                                 .toList(),
                             onChanged: (v) async {
                               if (v == null) return;
-                              await db.setUserRole(userId: doc.id, role: v);
+                              await db.updateOrderStatus(orderId: doc.id, status: v);
                               if (!context.mounted) return;
                               ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(content: Text('Updated role to $v')),
+                                SnackBar(content: Text('Order updated to $v')),
                               );
                             },
                           ),
@@ -90,3 +98,9 @@ class UsersPage extends StatelessWidget {
     );
   }
 }
+
+
+
+
+
+

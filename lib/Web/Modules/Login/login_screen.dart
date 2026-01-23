@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:myecommerce/Web/service/Firebase/firebase_auth.dart';
+import 'package:myecommerce/Web/service/firestore_storefront_service.dart';
 import 'package:myecommerce/Web/service/responsive_service.dart';
 import 'package:myecommerce/Web/service/route_service.dart';
 
@@ -15,8 +16,12 @@ class _SignInScreenState extends State<SignInScreen> {
   final _formKey = GlobalKey<FormState>();
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
+  final TextEditingController _phoneController = TextEditingController();
+  final TextEditingController _otpController = TextEditingController();
   final AuthService _authService = AuthService();
 
+  bool _usePhone = false;
+  bool _otpSent = false;
   bool _obscurePassword = true;
   bool _isLoading = false;
 
@@ -24,6 +29,8 @@ class _SignInScreenState extends State<SignInScreen> {
   void dispose() {
     _emailController.dispose();
     _passwordController.dispose();
+    _phoneController.dispose();
+    _otpController.dispose();
     super.dispose();
   }
 
@@ -41,21 +48,45 @@ class _SignInScreenState extends State<SignInScreen> {
     setState(() => _isLoading = true);
 
     try {
-      final email = _emailController.text.trim();
-      final password = _passwordController.text;
+      if (_usePhone) {
+        if (!_otpSent) {
+          await _authService.sendOtp(phoneNumber: _phoneController.text);
+          if (!mounted) return;
+          setState(() => _otpSent = true);
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('OTP sent')),
+          );
+        } else {
+          final result = await _authService.verifyOtp(smsCode: _otpController.text);
+          final user = result?.user;
+          if (user != null) {
+            await FirestoreStorefrontService().upsertUserProfile(
+              uid: user.uid,
+              email: user.email ?? '',
+              name: '',
+            );
+          }
+          if (mounted) context.go(Routes.home);
+        }
+      } else {
+        final email = _emailController.text.trim();
+        final password = _passwordController.text;
 
-      debugPrint('Attempting sign in...');
-      debugPrint('Email: $email');
-      debugPrint('Password length: ${password.length}');
+        final results = await _authService.signInWithEmailPassword(
+          email: email,
+          password: password,
+        );
 
-      final results = await _authService.signInWithEmailPassword(
-        email: email,
-        password: password,
-      );
+        final user = results?.user;
+        if (user != null) {
+          await FirestoreStorefrontService().upsertUserProfile(
+            uid: user.uid,
+            email: user.email ?? email,
+            name: '',
+          );
+        }
 
-      if (mounted) {
-        debugPrint('Sign in successful: ${results!.user!.email}');
-        context.go(Routes.home);
+        if (mounted) context.go(Routes.home);
       }
     } catch (e) {
       debugPrint('Sign in error: $e'); // Add this line
@@ -68,6 +99,29 @@ class _SignInScreenState extends State<SignInScreen> {
           ),
         );
       }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _signInWithGoogle() async {
+    setState(() => _isLoading = true);
+    try {
+      final cred = await _authService.signInWithGoogle();
+      final user = cred?.user;
+      if (user != null) {
+        await FirestoreStorefrontService().upsertUserProfile(
+          uid: user.uid,
+          email: user.email ?? '',
+          name: user.displayName ?? '',
+        );
+      }
+      if (mounted) context.go(Routes.home);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.toString()), backgroundColor: Colors.red),
+      );
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -227,6 +281,34 @@ class _SignInScreenState extends State<SignInScreen> {
               color: Colors.black87,
             ),
           ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: ChoiceChip(
+                  label: const Text('Email'),
+                  selected: !_usePhone,
+                  onSelected: (v) => setState(() {
+                    _usePhone = false;
+                    _otpSent = false;
+                    _otpController.clear();
+                  }),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: ChoiceChip(
+                  label: const Text('Mobile (OTP)'),
+                  selected: _usePhone,
+                  onSelected: (v) => setState(() {
+                    _usePhone = true;
+                    _otpSent = false;
+                    _otpController.clear();
+                  }),
+                ),
+              ),
+            ],
+          ),
           SizedBox(
             height: ResponsiveService.getResponsiveValue(
               context: context,
@@ -235,67 +317,226 @@ class _SignInScreenState extends State<SignInScreen> {
             ),
           ),
 
-          // Email field
-          Text(
-            'Email',
-            style: TextStyle(
-              fontSize: ResponsiveService.getResponsiveFontSize(
-                context,
-                baseFontSize: 14.0,
-              ),
-              color: Colors.black87,
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-          const SizedBox(height: 8),
-          TextFormField(
-            controller: _emailController,
-            keyboardType: TextInputType.emailAddress,
-            validator: (value) {
-              if (value == null || value.isEmpty) {
-                return 'Please enter your email';
-              }
-              if (!value.contains('@')) {
-                return 'Please enter a valid email';
-              }
-              return null;
-            },
-            decoration: InputDecoration(
-              hintText: 'Enter your email',
-              filled: true,
-              fillColor: const Color(0xFFFFF5F3),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(8),
-                borderSide: BorderSide.none,
-              ),
-              errorBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(8),
-                borderSide: const BorderSide(color: Colors.red),
-              ),
-              contentPadding: EdgeInsets.symmetric(
-                horizontal: ResponsiveService.getResponsiveValue(
-                  context: context,
-                  mobile: 14.0,
-                  desktop: 16.0,
+          if (!_usePhone) ...[
+            // Email field
+            Text(
+              'Email',
+              style: TextStyle(
+                fontSize: ResponsiveService.getResponsiveFontSize(
+                  context,
+                  baseFontSize: 14.0,
                 ),
-                vertical: 14.0,
+                color: Colors.black87,
+                fontWeight: FontWeight.w500,
               ),
             ),
-          ),
-          SizedBox(
-            height: ResponsiveService.getResponsiveValue(
-              context: context,
-              mobile: 20.0,
-              desktop: 24.0,
+            const SizedBox(height: 8),
+            TextFormField(
+              controller: _emailController,
+              keyboardType: TextInputType.emailAddress,
+              validator: (value) {
+                if (_usePhone) return null;
+                if (value == null || value.isEmpty) {
+                  return 'Please enter your email';
+                }
+                if (!value.contains('@')) {
+                  return 'Please enter a valid email';
+                }
+                return null;
+              },
+              decoration: InputDecoration(
+                hintText: 'Enter your email',
+                filled: true,
+                fillColor: const Color(0xFFFFF5F3),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: BorderSide.none,
+                ),
+                errorBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: const BorderSide(color: Colors.red),
+                ),
+                contentPadding: EdgeInsets.symmetric(
+                  horizontal: ResponsiveService.getResponsiveValue(
+                    context: context,
+                    mobile: 14.0,
+                    desktop: 16.0,
+                  ),
+                  vertical: 14.0,
+                ),
+              ),
             ),
-          ),
+            SizedBox(
+              height: ResponsiveService.getResponsiveValue(
+                context: context,
+                mobile: 20.0,
+                desktop: 24.0,
+              ),
+            ),
 
-          // Password field
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
+            // Password field
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'Password',
+                  style: TextStyle(
+                    fontSize: ResponsiveService.getResponsiveFontSize(
+                      context,
+                      baseFontSize: 14.0,
+                    ),
+                    color: Colors.black87,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                TextButton(
+                  onPressed: _forgotPassword,
+                  style: TextButton.styleFrom(
+                    padding: EdgeInsets.zero,
+                    minimumSize: const Size(0, 0),
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                  child: Text(
+                    'Forgot Password ?',
+                    style: TextStyle(
+                      fontSize: ResponsiveService.getResponsiveFontSize(
+                        context,
+                        baseFontSize: 12.0,
+                      ),
+                      color: Colors.grey,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            TextFormField(
+              controller: _passwordController,
+              obscureText: _obscurePassword,
+              validator: (value) {
+                if (_usePhone) return null;
+                if (value == null || value.isEmpty) {
+                  return 'Please enter your password';
+                }
+                if (value.length < 6) {
+                  return 'Password must be at least 6 characters';
+                }
+                return null;
+              },
+              decoration: InputDecoration(
+                hintText: '••••••••••••',
+                filled: true,
+                fillColor: const Color(0xFFFFF5F3),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: BorderSide.none,
+                ),
+                errorBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: const BorderSide(color: Colors.red),
+                ),
+                contentPadding: EdgeInsets.symmetric(
+                  horizontal: ResponsiveService.getResponsiveValue(
+                    context: context,
+                    mobile: 14.0,
+                    desktop: 16.0,
+                  ),
+                  vertical: 14.0,
+                ),
+                suffixIcon: IconButton(
+                  icon: Icon(
+                    _obscurePassword
+                        ? Icons.visibility_off_outlined
+                        : Icons.visibility_outlined,
+                    color: Colors.grey,
+                    size: 20,
+                  ),
+                  onPressed: () {
+                    setState(() => _obscurePassword = !_obscurePassword);
+                  },
+                ),
+              ),
+            ),
+          ] else ...[
+            Text(
+              'Mobile Number',
+              style: TextStyle(
+                fontSize: ResponsiveService.getResponsiveFontSize(
+                  context,
+                  baseFontSize: 14.0,
+                ),
+                color: Colors.black87,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+            const SizedBox(height: 8),
+            TextFormField(
+              controller: _phoneController,
+              keyboardType: TextInputType.phone,
+              validator: (value) {
+                if (!_usePhone) return null;
+                if (value == null || value.trim().isEmpty) {
+                  return 'Please enter your mobile number';
+                }
+                final cleaned = value.trim().replaceAll(RegExp(r'[\s\-\(\)]'), '');
+                if (!cleaned.startsWith('+')) {
+                  return 'Include country code (example: +919876543210)';
+                }
+                if (!RegExp(r'^\+\d{8,15}$').hasMatch(cleaned)) {
+                  return 'Invalid phone format';
+                }
+                return null;
+              },
+              decoration: InputDecoration(
+                hintText: 'e.g. +919876543210',
+                filled: true,
+                fillColor: const Color(0xFFFFF5F3),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: BorderSide.none,
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            if (_otpSent) ...[
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const SizedBox(),
+                  TextButton(
+                    onPressed: _isLoading
+                        ? null
+                        : () async {
+                            if (!_formKey.currentState!.validate()) return;
+                            setState(() => _isLoading = true);
+                            try {
+                              await _authService.sendOtp(
+                                phoneNumber: _phoneController.text,
+                              );
+                              if (!mounted) return;
+                              _otpController.clear();
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text('OTP resent')),
+                              );
+                            } catch (e) {
+                              if (!mounted) return;
+                              setState(() => _otpSent = false);
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text(e.toString()),
+                                  backgroundColor: Colors.red,
+                                ),
+                              );
+                            } finally {
+                              if (mounted) setState(() => _isLoading = false);
+                            }
+                          },
+                    child: const Text('Resend OTP'),
+                  ),
+                ],
+              ),
               Text(
-                'Password',
+                'OTP',
                 style: TextStyle(
                   fontSize: ResponsiveService.getResponsiveFontSize(
                     context,
@@ -305,73 +546,38 @@ class _SignInScreenState extends State<SignInScreen> {
                   fontWeight: FontWeight.w500,
                 ),
               ),
-              TextButton(
-                onPressed: _forgotPassword,
-                style: TextButton.styleFrom(
-                  padding: EdgeInsets.zero,
-                  minimumSize: const Size(0, 0),
-                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                ),
-                child: Text(
-                  'Forgot Password ?',
-                  style: TextStyle(
-                    fontSize: ResponsiveService.getResponsiveFontSize(
-                      context,
-                      baseFontSize: 12.0,
-                    ),
-                    color: Colors.grey,
+              const SizedBox(height: 8),
+              TextFormField(
+                controller: _otpController,
+                keyboardType: TextInputType.number,
+                validator: (value) {
+                  if (!_usePhone) return null;
+                  if (!_otpSent) return null;
+                  if (value == null || value.trim().isEmpty) {
+                    return 'Enter OTP';
+                  }
+                  return null;
+                },
+                decoration: InputDecoration(
+                  hintText: 'Enter OTP',
+                  filled: true,
+                  fillColor: const Color(0xFFFFF5F3),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide: BorderSide.none,
                   ),
                 ),
               ),
             ],
-          ),
-          const SizedBox(height: 8),
-          TextFormField(
-            controller: _passwordController,
-            obscureText: _obscurePassword,
-            validator: (value) {
-              if (value == null || value.isEmpty) {
-                return 'Please enter your password';
-              }
-              if (value.length < 6) {
-                return 'Password must be at least 6 characters';
-              }
-              return null;
-            },
-            decoration: InputDecoration(
-              hintText: '••••••••••••',
-              filled: true,
-              fillColor: const Color(0xFFFFF5F3),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(8),
-                borderSide: BorderSide.none,
-              ),
-              errorBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(8),
-                borderSide: const BorderSide(color: Colors.red),
-              ),
-              contentPadding: EdgeInsets.symmetric(
-                horizontal: ResponsiveService.getResponsiveValue(
-                  context: context,
-                  mobile: 14.0,
-                  desktop: 16.0,
-                ),
-                vertical: 14.0,
-              ),
-              suffixIcon: IconButton(
-                icon: Icon(
-                  _obscurePassword
-                      ? Icons.visibility_off_outlined
-                      : Icons.visibility_outlined,
-                  color: Colors.grey,
-                  size: 20,
-                ),
-                onPressed: () {
-                  setState(() => _obscurePassword = !_obscurePassword);
-                },
-              ),
+          ],
+          SizedBox(
+            height: ResponsiveService.getResponsiveValue(
+              context: context,
+              mobile: 20.0,
+              desktop: 24.0,
             ),
           ),
+
           SizedBox(
             height: ResponsiveService.getResponsiveValue(
               context: context,
@@ -415,7 +621,9 @@ class _SignInScreenState extends State<SignInScreen> {
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         Text(
-                          'SIGN IN',
+                          _usePhone
+                              ? (_otpSent ? 'VERIFY OTP' : 'SEND OTP')
+                              : 'SIGN IN',
                           style: TextStyle(
                             fontSize: ResponsiveService.getResponsiveFontSize(
                               context,
@@ -437,6 +645,15 @@ class _SignInScreenState extends State<SignInScreen> {
               context: context,
               mobile: 20.0,
               desktop: 24.0,
+            ),
+          ),
+
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: _isLoading ? null : _signInWithGoogle,
+              icon: const Icon(Icons.g_mobiledata),
+              label: const Text('Continue with Google'),
             ),
           ),
 

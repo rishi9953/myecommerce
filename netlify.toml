@@ -1,0 +1,14 @@
+[build]
+  # Note: Flutter needs to be installed in Netlify's build environment
+  # You may need to use a build image with Flutter or install it manually
+  command = "flutter pub get && flutter build web --release"
+  publish = "build/web"
+
+[build.environment]
+  FLUTTER_VERSION = "stable"
+
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+
